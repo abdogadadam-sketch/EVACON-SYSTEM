@@ -1,9 +1,67 @@
-for _, row in results.iterrows():
-        # استخراج وتحديد الموقع الأدق المتاح
+import streamlit as st
+import pandas as pd
+
+st.set_page_config(page_title="Evacon AI System", layout="wide")
+
+# تخصيص الواجهة باللغة العربية
+st.markdown("""
+    <style>
+    body, [data-testid="stAppViewContainer"] {
+        direction: rtl;
+        text-align: right;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .stTextInput>div>div>input {
+        text-align: right;
+        direction: rtl;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("🏢 محرك البحث العقاري - Evacon AI")
+st.caption("نظام الاستعلام الذكي عن المشاريع، الوحدات، والمواقع بدقة")
+
+@st.cache_data
+def load_data():
+    path = "EVACON_REAL_ESTATE_MASTER_DATABASE.xlsx"
+    df_devs = pd.read_excel(path, sheet_name="01_DEVELOPERS")
+    df_projs = pd.read_excel(path, sheet_name="02_PROJECTS")
+    df_units = pd.read_excel(path, sheet_name="03_UNITS")
+    df_plans = pd.read_excel(path, sheet_name="04_PAYMENT_PLANS")
+    df_notes = pd.read_excel(path, sheet_name="05_COMMERCIAL_NOTES")
+
+    m = df_units.merge(df_projs, on="Project_ID", how="left")
+    m = m.merge(df_devs, on="Developer_ID", how="left")
+    m = m.merge(df_plans, on="Unit_ID", how="left")
+    m = m.merge(df_notes, on="Unit_ID", how="left")
+    return m
+
+df = load_data()
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("إجمالي الوحدات", len(df))
+col2.metric("المشاريع المتاحة", df["Project_Name"].nunique())
+col3.metric("المطورين", df["Developer_Name"].nunique())
+col4.metric("المواقع المغطاة", df["Normalized_Location"].nunique())
+
+st.divider()
+
+search_term = st.text_input("ابحث عن أي شيء (اسم مشروع، مطور، منطقة، نوع وحدة):", placeholder="مثال: الشروق، زايد، تجاري، Makan...")
+
+if search_term:
+    q = search_term.strip().lower()
+    results = df[
+        df["Developer_Name"].astype(str).str.lower().str.contains(q, na=False) |
+        df["Project_Name"].astype(str).str.lower().str.contains(q, na=False) |
+        df["Normalized_Location"].astype(str).str.lower().str.contains(q, na=False) |
+        df["Unit_Type"].astype(str).str.lower().str.contains(q, na=False)
+    ]
+    
+    st.write(f"تم العثور على **{len(results)}** نتيجة:")
+    
+    for _, row in results.iterrows():
         raw_loc = row.get('Location_Raw', '')
         norm_loc = row.get('Normalized_Location', '')
-        
-        # اختيار العنوان الأدق (الخام أولاً إذا كان يحمل تفاصيل أكثر)
         detailed_location = raw_loc if pd.notna(raw_loc) and str(raw_loc).strip() != '' else norm_loc
         
         with st.expander(f"📌 {row['Project_Name']} - {row['Unit_Type']} ({detailed_location})"):
@@ -24,11 +82,9 @@ for _, row in results.iterrows():
             c2.write(f"**نسبة المقدم:** {dp}")
             c2.write(f"**فترة السداد:** {row.get('Installment_Period', 'غير مدونة')}")
             
-            # خانة الموقع الدقيق والتشطيب
             c3.write(f"📍 **الموقع التفصيلي:** {detailed_location}")
             c3.write(f"**التشطيب:** {row.get('Finishing', 'غير مدون')}")
             c3.write(f"**موعد الاستلام:** {row.get('Delivery_Date', 'غير مدون')}")
             
             if pd.notna(row.get('Commercial_Highlights')):
-                st.info(f"💡 **تفاصيل ومميزات الموقع الإضافية:** {row['Commercial_Highlights']}")
-            
+                st.info(f"💡 **تفاصيل ومميزات إضافية:** {row['Commercial_Highlights']}")
